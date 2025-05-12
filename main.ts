@@ -98,7 +98,7 @@ class AzureDevOpsClient {
     this.token = token;
   }
 
-  private async request(path: string, method = "GET", body?: unknown): Promise<unknown> {
+  private async request(path: string, method = "GET", body?: unknown): Promise<{ data: unknown, headers: Headers }> {
     const headers = new Headers({
       "Authorization": `Basic ${btoa(`:${this.token}`)}`,
       "Content-Type": "application/json",
@@ -115,17 +115,18 @@ class AzureDevOpsClient {
       throw new Error(`Azure DevOps API error (${response.status}): ${errorText}`);
     }
 
-    return response.json();
+    const data = await response.json();
+    return { data, headers: response.headers };
   }
 
   async getProjects(): Promise<any[]> {
-    const response = await this.request("_apis/projects?api-version=7.0") as { value: any[] };
-    return response.value;
+    const { data } = await this.request("_apis/projects?api-version=7.0");
+    return (data as { value: any[] }).value;
   }
 
   async getRepositories(projectId: string): Promise<any[]> {
-    const response = await this.request(`${projectId}/_apis/git/repositories?api-version=7.0`) as { value: any[] };
-    return response.value;
+    const { data } = await this.request(`${projectId}/_apis/git/repositories?api-version=7.0`);
+    return (data as { value: any[] }).value;
   }
 
   async getCommits(projectId: string, repositoryId: string, authorEmail: string, fromDate?: Date): Promise<any[]> {
@@ -135,8 +136,31 @@ class AzureDevOpsClient {
       path += `&searchCriteria.fromDate=${fromDate.toISOString()}`;
     }
 
-    const response = await this.request(path) as { value: any[] };
-    return response.value;
+    // Add a larger page size to reduce the number of API calls needed
+    path += "&$top=100";
+
+    let allCommits: any[] = [];
+    let isNext: boolean | null = null;
+
+    do {
+      // Add the continuation token if we have one
+      const currentPath = isNext
+        ? `${path}&$skip=${allCommits.length}`
+        : path;
+
+      const { data, headers } = await this.request(currentPath);
+      const responseData = data as { value: any[], count: number };
+
+      // Add the current page of commits to our result
+      allCommits = allCommits.concat(responseData.value);
+
+      // Check if there are more pages
+      // The continuation token is in the response headers
+      isNext = headers.get('link')?.includes('rel="next"') ?? false;
+
+    } while (isNext);
+
+    return allCommits;
   }
 }
 
@@ -437,9 +461,7 @@ async function main() {
 
         for (const email of emails) {
           try {
-            // Use the more recent of oneYearAgo or lastCommitDate as the fromDate
-            const fromDate = lastCommitDate && lastCommitDate > oneYearAgo ? lastCommitDate : oneYearAgo;
-            const commits = await azureClient.getCommits(project.id, repo.id, email, fromDate);
+            const commits = await azureClient.getCommits(project.id, repo.id, email, lastCommitDate || undefined);
 
             if (commits.length > 0) {
               allCommits.push(...commits.map(commit => ({
