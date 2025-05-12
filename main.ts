@@ -13,15 +13,28 @@ interface Config {
   emails: string[];
 }
 
-// Configuration file path
-const CONFIG_FILE = join(Deno.cwd(), "config.json");
+// Function to get config file path for an organization
+function getConfigFilePath(organization: string): string {
+  return join(Deno.cwd(), `${organization}.config.json`);
+}
 
 // Function to read configuration from file
-async function readConfig(): Promise<Config | null> {
+async function readConfig(organization?: string): Promise<Config | null> {
   try {
-    if (await exists(CONFIG_FILE)) {
-      const content = await Deno.readTextFile(CONFIG_FILE);
-      return JSON.parse(content) as Config;
+    // If organization is provided, read organization-specific config
+    if (organization) {
+      const orgConfigFile = getConfigFilePath(organization);
+      if (await exists(orgConfigFile)) {
+        const content = await Deno.readTextFile(orgConfigFile);
+        return JSON.parse(content) as Config;
+      }
+    } else {
+      // For backward compatibility, try to read from the default config file
+      const defaultConfigFile = join(Deno.cwd(), "config.json");
+      if (await exists(defaultConfigFile)) {
+        const content = await Deno.readTextFile(defaultConfigFile);
+        return JSON.parse(content) as Config;
+      }
     }
   } catch (error) {
     console.error(colors.yellow(`Warning: Failed to read config file: ${error.message}`));
@@ -32,10 +45,45 @@ async function readConfig(): Promise<Config | null> {
 // Function to write configuration to file
 async function writeConfig(config: Config): Promise<void> {
   try {
-    await Deno.writeTextFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+    const configFile = getConfigFilePath(config.organization);
+    await Deno.writeTextFile(configFile, JSON.stringify(config, null, 2));
   } catch (error) {
     console.error(colors.yellow(`Warning: Failed to write config file: ${error.message}`));
   }
+}
+
+// Function to list available organizations from config files
+async function listAvailableOrganizations(): Promise<string[]> {
+  const organizations: string[] = [];
+
+  try {
+    // Read all files in the current directory
+    for await (const entry of Deno.readDir(Deno.cwd())) {
+      if (entry.isFile && entry.name.endsWith('.config.json')) {
+        // Extract organization name from filename (remove .config.json)
+        const orgName = entry.name.slice(0, -12);
+        organizations.push(orgName);
+      }
+    }
+
+    // Also check for the default config file
+    const defaultConfigFile = join(Deno.cwd(), "config.json");
+    if (await exists(defaultConfigFile)) {
+      try {
+        const content = await Deno.readTextFile(defaultConfigFile);
+        const config = JSON.parse(content) as Config;
+        if (config.organization && !organizations.includes(config.organization)) {
+          organizations.push(config.organization);
+        }
+      } catch (e) {
+        // Ignore errors reading the default config
+      }
+    }
+  } catch (error) {
+    console.error(colors.yellow(`Warning: Failed to list organizations: ${error.message}`));
+  }
+
+  return organizations;
 }
 
 // Azure DevOps API client
@@ -190,37 +238,64 @@ class GitOperations {
 async function main() {
   console.log(colors.bold(colors.blue("\n🔄 Azure DevOps Contribution Sync Tool 🔄\n")));
 
-  // Load existing configuration if available
-  const existingConfig = await readConfig();
   let organization: string;
   let token: string;
   let emails: string[];
+  let existingConfig: Config | null = null;
 
-  // Step 1: Azure DevOps Authentication
-  if (existingConfig?.organization) {
-    console.log(colors.yellow(`Found saved organization: ${existingConfig.organization}`));
-    const useExisting = await Confirm.prompt({
-      message: "Use this organization?",
+  // Step 1: Organization Selection
+  const availableOrganizations = await listAvailableOrganizations();
+
+  if (availableOrganizations.length > 0) {
+    console.log(colors.yellow("Found saved organizations:"));
+    for (let i = 0; i < availableOrganizations.length; i++) {
+      console.log(colors.yellow(`  ${i + 1}. ${availableOrganizations[i]}`));
+    }
+
+    const useExistingOrg = await Confirm.prompt({
+      message: "Use one of these organizations?",
       default: true,
     });
 
-    if (useExisting) {
-      organization = existingConfig.organization;
+    if (useExistingOrg) {
+      let selectedIndex: number;
+
+      if (availableOrganizations.length === 1) {
+        selectedIndex = 0;
+        console.log(colors.yellow(`Selected organization: ${availableOrganizations[0]}`));
+      } else {
+        const selection = await Input.prompt({
+          message: "Enter the number of the organization to use:",
+          validate: (value) => {
+            const num = parseInt(value);
+            return (num > 0 && num <= availableOrganizations.length) 
+              ? true 
+              : `Please enter a number between 1 and ${availableOrganizations.length}`;
+          },
+        });
+        selectedIndex = parseInt(selection) - 1;
+      }
+
+      organization = availableOrganizations[selectedIndex];
+      existingConfig = await readConfig(organization);
     } else {
       organization = await Input.prompt({
         message: "Enter your Azure DevOps organization name:",
         validate: (value) => value.trim() ? true : "Organization name cannot be empty",
       });
+      existingConfig = await readConfig(organization);
     }
   } else {
+    console.log(colors.yellow("No saved organizations found."));
     organization = await Input.prompt({
       message: "Enter your Azure DevOps organization name:",
       validate: (value) => value.trim() ? true : "Organization name cannot be empty",
     });
   }
 
+  // Step 2: Azure DevOps Authentication
   if (existingConfig?.token) {
-    console.log(colors.yellow("Found saved Personal Access Token"));
+    console.log(colors.yellow(`Found saved Personal Access Token for organization: ${organization}`));
     const useExisting = await Confirm.prompt({
       message: "Use saved Personal Access Token?",
       default: true,
@@ -256,9 +331,9 @@ async function main() {
     Deno.exit(1);
   }
 
-  // Step 2: Get email addresses
+  // Step 3: Get email addresses
   if (existingConfig?.emails && existingConfig.emails.length > 0) {
-    console.log(colors.yellow(`Found saved email addresses: ${existingConfig.emails.join(", ")}`));
+    console.log(colors.yellow(`Found saved email addresses for ${organization}: ${existingConfig.emails.join(", ")}`));
     const useExisting = await Confirm.prompt({
       message: "Use these email addresses?",
       default: true,
@@ -293,7 +368,7 @@ async function main() {
     emails = emailInput.split(",").map(e => e.trim());
   }
 
-  // Save the configuration
+  // Save the configuration to organization-specific file
   await writeConfig({
     organization,
     token,
@@ -302,8 +377,9 @@ async function main() {
 
   console.log(colors.green(`Searching for commits by: ${emails.join(", ")}`));
 
-  // Step 3: Prepare the contributions folder and git repository
-  const contributionsPath = join(Deno.cwd(), "contributions");
+  // Step 4: Prepare the contributions folder and git repository
+  const contributionsBasePath = join(Deno.cwd(), "contributions");
+  const contributionsPath = join(contributionsBasePath, organization);
   const gitOps = new GitOperations(contributionsPath, organization);
 
   spinner.text = "Preparing contributions repository...";
@@ -320,11 +396,16 @@ async function main() {
   // Get the last commit date if the file exists
   const lastCommitDate = await gitOps.getLastCommitDate();
   if (lastCommitDate) {
-    console.log(colors.yellow(`Found existing ${organization}.txt with last commit date: ${lastCommitDate.toLocaleString()}`));
+    console.log(colors.yellow(`Found existing foo.txt with last commit date: ${lastCommitDate.toLocaleString()}`));
     console.log(colors.yellow("Only processing commits after this date."));
   }
 
-  // Step 4: Fetch projects and repositories
+  // Calculate date 366 days ago
+  const oneYearAgo = new Date();
+  oneYearAgo.setDate(oneYearAgo.getDate() - 366);
+  console.log(colors.yellow(`Looking for commits within the last 366 days (since ${oneYearAgo.toLocaleString()})`));
+
+  // Step 5: Fetch projects and repositories
   spinner.text = "Fetching projects...";
   spinner.start();
 
@@ -337,7 +418,7 @@ async function main() {
     Deno.exit(1);
   }
 
-  // Step 5: Process each project and repository
+  // Step 6: Process each project and repository
   const allCommits: { commit: any; project: string; repository: string }[] = [];
 
   for (let i = 0; i < projects.length; i++) {
@@ -356,7 +437,9 @@ async function main() {
 
         for (const email of emails) {
           try {
-            const commits = await azureClient.getCommits(project.id, repo.id, email, lastCommitDate || undefined);
+            // Use the more recent of oneYearAgo or lastCommitDate as the fromDate
+            const fromDate = lastCommitDate && lastCommitDate > oneYearAgo ? lastCommitDate : oneYearAgo;
+            const commits = await azureClient.getCommits(project.id, repo.id, email, fromDate);
 
             if (commits.length > 0) {
               allCommits.push(...commits.map(commit => ({
@@ -379,7 +462,7 @@ async function main() {
     }
   }
 
-  // Step 6: Sort commits by date and process them
+  // Step 7: Sort commits by date and process them
   console.log(colors.blue(`\nFound a total of ${allCommits.length} commits across all repositories`));
 
   if (allCommits.length === 0) {
