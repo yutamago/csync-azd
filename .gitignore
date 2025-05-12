@@ -1,3 +1,4 @@
 contributions
 bin/*
 *.config.json
+.idea
