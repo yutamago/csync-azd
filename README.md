@@ -1,143 +1,122 @@
 # Azure DevOps Contribution Sync Tool
 
-A tool that helps you sync your Azure DevOps contributions to Github.
+A command-line tool that syncs your Azure DevOps commits to a local Git repository.
 
-## Prerequisites
+## What it does
 
-- [Deno](https://deno.land/) v1.32.0 or higher
-- [Git](https://git-scm.com/) installed and available in your PATH
-- An Azure DevOps account with a Personal Access Token (PAT)
+- Logs into your Azure DevOps account using a Personal Access Token
+- Finds all commits made by your email address(es) across all accessible repositories
+- Creates a local Git repository with commits that mirror your Azure DevOps contributions
+- Only processes commits from the last 366 days or newer than existing commits
 
 ## Installation
 
-1. Clone this repository:
-   ```
-   git clone https://github.com/yourusername/contribution-sync-azure-devops-to-github.git
-   cd contribution-sync-azure-devops-to-github
-   ```
+### Download pre-built binary
 
-2. Run the tool using Deno:
-   ```
-   deno task start
-   ```
-
-   Or, if you prefer to run it directly:
-   ```
-   deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-sys main.ts
-   ```
-
-## Usage
-
-When you run the tool, it will guide you through the following steps:
-
-1. **Organization Selection**: Choose an existing organization or enter a new one
-2. **Authentication**: Enter your Azure DevOps Personal Access Token (PAT) or use a saved one
-3. **Email Selection**: Enter one or more email addresses to search for commits
-4. **Repository Preparation**: The tool will create a local Git repository in `contributions/{organization}/`
-5. **Commit Syncing**: The tool will find all your commits and recreate them in the local repository
-
-### Creating a Personal Access Token (PAT)
-
-1. Go to your Azure DevOps organization settings
-2. Select "Personal access tokens"
-3. Click "New Token"
-4. Give it a name and set the expiration
-5. Select the following scopes:
-   - Code: Read
-   - Project and Team: Read
-6. Click "Create" and copy your token
-
-## Configuration
-
-The tool saves your configuration in organization-specific files:
-- `{organization}.config.json`: Contains your organization name, PAT, and email addresses
-
-These files are created automatically when you use the tool. You can edit them manually if needed.
-
-## Examples
-
-### Basic Usage
+Download the appropriate binary for your platform from the [Releases](https://github.com/yourusername/contribution-sync-azure-devops-to-github/releases) page:
 
 ```
+# Windows
+csync-azd-windows-x86_64-v1.0.0.exe
+
+# macOS (Intel)
+csync-azd-macos-x86_64-v1.0.0
+
+# macOS (Apple Silicon)
+csync-azd-macos-arm64-v1.0.0
+
+# Linux (x86_64)
+csync-azd-linux-x86_64-v1.0.0
+
+# Linux (ARM64)
+csync-azd-linux-arm64-v1.0.0
+```
+
+### Run with Deno
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/contribution-sync-azure-devops-to-github.git
+cd contribution-sync-azure-devops-to-github
+
+# Run with Deno
 deno task start
 ```
 
-Follow the prompts to enter your organization, PAT, and email addresses.
+## Quick Start
 
-### Switching Between Organizations
-
-When you run the tool, it will show you a list of previously used organizations. You can select one to quickly switch between different Azure DevOps organizations.
-
-## How It Works
-
-1. The tool connects to the Azure DevOps API using your PAT
-2. It searches all accessible projects and repositories for commits made by your email addresses
-3. For each commit found, it creates a file in a local Git repository with the commit's timestamp
-4. It commits this file with the original commit date, creating a history that mirrors your Azure DevOps contributions
-
-## Troubleshooting
-
-### Authentication Issues
-
-If you see "Failed to connect to Azure DevOps", check that:
-- Your PAT is correct and hasn't expired
-- Your organization name is spelled correctly
-- Your PAT has the necessary permissions (Code: Read, Project and Team: Read)
-
-### No Commits Found
-
-If the tool doesn't find any commits, check that:
-- You've entered the correct email addresses
-- The email addresses match those used in your Azure DevOps commits
-- You have commits within the last 366 days
-
-### Git Issues
-
-If you encounter Git-related errors, ensure that:
-- Git is installed and available in your PATH
-- You have permission to create and write to the `contributions` directory
-
-## Releases and Binaries
-
-Pre-built binaries for Windows, macOS, and Linux are available on the [Releases](https://github.com/yourusername/contribution-sync-azure-devops-to-github/releases) page. Download the appropriate binary for your platform:
-
-- Windows (x86_64): `csync-azd-windows-x86_64.exe`
-- macOS (x86_64): `csync-azd-macos-x86_64`
-- macOS (arm64): `csync-azd-macos-arm64`
-- Linux (x86_64): `csync-azd-linux-x86_64`
-- Linux (arm64): `csync-azd-linux-arm64`
-
-### Creating a New Release
-
-To create a new release:
-
-1. Update the version number in your code if applicable
-2. Create a new tag with a version number (e.g., `v1.0.0`):
+1. Run the tool:
+   ```bash
+   ./csync-azd-windows-x86_64-v1.0.0.exe
    ```
-   git tag v1.0.0
-   git push origin v1.0.0
+
+2. Enter your Azure DevOps organization name:
    ```
-3. The GitHub Actions workflow will automatically build the binaries and create a release
+   Enter your Azure DevOps organization name: myorganization
+   ```
 
-### Building Locally
+3. Enter your Personal Access Token (PAT):
+   ```
+   Enter your Azure DevOps Personal Access Token (PAT): ********
+   ```
 
-If you prefer to build the binaries locally:
+4. Enter your email address(es):
+   ```
+   Enter email address(es) to search for (comma-separated for multiple): user@example.com,another@example.com
+   ```
 
-```
-deno task compile:local  # Build for the local platform
-deno task compile        # Build for all platforms
-deno task compile:win    # Build for Windows only
-deno task compile:mac    # Build for macOS only
-deno task compile:linux  # Build for Linux only
+5. The tool will:
+   - Connect to Azure DevOps
+   - Find all your commits
+   - Create a local Git repository in `contributions/myorganization/`
+   - Create commits that mirror your Azure DevOps contributions
+
+## Creating a Personal Access Token (PAT)
+
+1. Go to https://dev.azure.com/{organization}/_usersSettings/tokens
+2. Click "New Token"
+3. Name: "Contribution Sync"
+4. Organization: Select your organization
+5. Expiration: Set as needed
+6. Scopes: Select "Read" for "Code"
+7. Create and copy the token
+
+## Examples
+
+### First-time use
+
+```bash
+./csync-azd-windows-x86_64-v1.0.0.exe
+
+> Enter your Azure DevOps organization name: myorganization
+> Enter your Azure DevOps Personal Access Token (PAT): ********
+> Enter email address(es) to search for: user@example.com
 ```
 
-The binaries will be available in the `bin` directory with the following names:
-- `csync-azd-windows-x86_64.exe` (Windows)
-- `csync-azd-macos-x86_64` (macOS x86_64)
-- `csync-azd-macos-arm64` (macOS arm64)
-- `csync-azd-linux-x86_64` (Linux x86_64)
-- `csync-azd-linux-arm64` (Linux arm64)
+### Subsequent use
+
+The tool saves your configuration, so next time you can just:
+
+```bash
+./csync-azd-windows-x86_64-v1.0.0.exe
+
+> Use saved organization "myorganization"? (y/n): y
+> Use saved Personal Access Token? (y/n): y
+> Use these email addresses? (y/n): y
+```
+
+## Building from Source
+
+```bash
+# Build for all platforms
+deno task build
+
+# Build for specific platform
+deno task build:win
+deno task build:mac
+deno task build:linux
+```
 
 ## License
 
-[MIT License](LICENSE)
+MIT

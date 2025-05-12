@@ -22,7 +22,20 @@ jobs:
           deno-version: v1.x
 
       - name: Build binaries
-        run: deno task compile
+        run: deno task build
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' deno.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+          # Verify that the tag version matches the deno.json version
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$TAG_VERSION" != "$VERSION" ]; then
+            echo "Warning: Tag version ($TAG_VERSION) does not match deno.json version ($VERSION)"
+          fi
 
       - name: Create Release
         id: create_release
@@ -30,11 +43,11 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            bin/csync-azd-windows-x86_64.exe
-            bin/csync-azd-macos-x86_64
-            bin/csync-azd-macos-arm64
-            bin/csync-azd-linux-x86_64
-            bin/csync-azd-linux-arm64
+            bin/csync-azd-windows-x86_64-v${{ steps.version.outputs.version }}.exe
+            bin/csync-azd-macos-x86_64-v${{ steps.version.outputs.version }}
+            bin/csync-azd-macos-arm64-v${{ steps.version.outputs.version }}
+            bin/csync-azd-linux-x86_64-v${{ steps.version.outputs.version }}
+            bin/csync-azd-linux-arm64-v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -43,8 +56,8 @@ jobs:
             ## Azure DevOps Contribution Sync Tool - ${{ github.ref_name }}
 
             ### Binaries
-            - Windows (x86_64): [csync-azd-windows-x86_64.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-windows-x86_64.exe)
-            - macOS (x86_64): [csync-azd-macos-x86_64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-macos-x86_64)
-            - macOS (arm64): [csync-azd-macos-arm64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-macos-arm64)
-            - Linux (x86_64): [csync-azd-linux-x86_64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-linux-x86_64)
-            - Linux (arm64): [csync-azd-linux-arm64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-linux-arm64)
+            - Windows (x86_64): [csync-azd-windows-x86_64-v${{ steps.version.outputs.version }}.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-windows-x86_64-v${{ steps.version.outputs.version }}.exe)
+            - macOS (x86_64): [csync-azd-macos-x86_64-v${{ steps.version.outputs.version }}](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-macos-x86_64-v${{ steps.version.outputs.version }})
+            - macOS (arm64): [csync-azd-macos-arm64-v${{ steps.version.outputs.version }}](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-macos-arm64-v${{ steps.version.outputs.version }})
+            - Linux (x86_64): [csync-azd-linux-x86_64-v${{ steps.version.outputs.version }}](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-linux-x86_64-v${{ steps.version.outputs.version }})
+            - Linux (arm64): [csync-azd-linux-arm64-v${{ steps.version.outputs.version }}](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-linux-arm64-v${{ steps.version.outputs.version }})

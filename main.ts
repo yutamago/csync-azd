@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-run --allow-env
+#!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-sys
 
 import {Confirm, Input, Secret} from "@cliffy/prompt";
 import {keypress} from "@cliffy/keypress";
@@ -268,7 +268,17 @@ class GitOperations {
 
 // Main application
 async function main() {
-  console.log(colors.bold(colors.blue("\n🔄 Azure DevOps Contribution Sync Tool 🔄\n")));
+  // Read version from deno.json
+  let version = "1.0.0";
+  try {
+    const denoJsonPath = join(Deno.cwd(), "deno.json");
+    const denoJson = JSON.parse(await Deno.readTextFile(denoJsonPath));
+    version = denoJson.version || version;
+  } catch (e) {
+    // Ignore errors reading deno.json
+  }
+
+  console.log(colors.bold(colors.blue(`\n🔄 Azure DevOps Contribution Sync Tool v${version} 🔄\n`)));
 
   let organization: string;
   let token: string;
