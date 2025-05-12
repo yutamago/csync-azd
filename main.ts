@@ -1,11 +1,42 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-run --allow-env
 
-import { Command } from "@cliffy/command";
-import { Input, Secret, Select, Confirm } from "@cliffy/prompt";
+import {Confirm, Input, Secret} from "@cliffy/prompt";
 import ora from "ora";
 import * as colors from "@std/fmt/colors";
-import { ensureDir, exists } from "@std/fs";
-import { join, dirname } from "@std/path";
+import {ensureDir, exists} from "@std/fs";
+import {join} from "@std/path";
+
+// Configuration interface
+interface Config {
+  organization: string;
+  token: string;
+  emails: string[];
+}
+
+// Configuration file path
+const CONFIG_FILE = join(Deno.cwd(), "config.json");
+
+// Function to read configuration from file
+async function readConfig(): Promise<Config | null> {
+  try {
+    if (await exists(CONFIG_FILE)) {
+      const content = await Deno.readTextFile(CONFIG_FILE);
+      return JSON.parse(content) as Config;
+    }
+  } catch (error) {
+    console.error(colors.yellow(`Warning: Failed to read config file: ${error.message}`));
+  }
+  return null;
+}
+
+// Function to write configuration to file
+async function writeConfig(config: Config): Promise<void> {
+  try {
+    await Deno.writeTextFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+  } catch (error) {
+    console.error(colors.yellow(`Warning: Failed to write config file: ${error.message}`));
+  }
+}
 
 // Azure DevOps API client
 class AzureDevOpsClient {
@@ -64,9 +95,11 @@ class AzureDevOpsClient {
 // Git operations
 class GitOperations {
   private repoPath: string;
+  private filename: string;
 
-  constructor(repoPath: string) {
+  constructor(repoPath: string, organization: string) {
     this.repoPath = repoPath;
+    this.filename = "foo.txt";
   }
 
   async initRepo(): Promise<void> {
@@ -90,14 +123,13 @@ class GitOperations {
 
   async createCommit(date: Date, message: string, content: string): Promise<void> {
     // Create or override the file
-    const filePath = join(this.repoPath, "foo.txt");
+    const filePath = join(this.repoPath, this.filename);
     await Deno.writeTextFile(filePath, content);
 
     // Add to git
     const addCmd = new Deno.Command('git', {
       args: ["add", "."],
       cwd: this.repoPath,
-      stdin: "piped",
       stdout: "piped",
       stderr: "piped",
     });
@@ -112,7 +144,6 @@ class GitOperations {
     const commitCmd = new Deno.Command('git', {
       args: ["commit", "--quiet", "--date", date.toISOString(), "-m", message],
       cwd: this.repoPath,
-      stdin: "piped",
       stdout: "piped",
       stderr: "piped",
     });
@@ -125,13 +156,13 @@ class GitOperations {
   }
 
   async getLastCommitDate(): Promise<Date | null> {
-    if (!(await exists(join(this.repoPath, "foo.txt")))) {
+    if (!(await exists(join(this.repoPath, this.filename)))) {
       return null;
     }
 
     try {
       const logCmd = new Deno.Command('git', {
-        args: ["log", "-1", "--format=%cd", "--date=iso", "--", "foo.txt"],
+        args: ["log", "-1", "--format=%cd", "--date=iso", "--", this.filename],
         cwd: this.repoPath,
         stdout: "piped",
         stderr: "piped",
@@ -159,16 +190,56 @@ class GitOperations {
 async function main() {
   console.log(colors.bold(colors.blue("\n🔄 Azure DevOps Contribution Sync Tool 🔄\n")));
 
-  // Step 1: Azure DevOps Authentication
-  const organization = await Input.prompt({
-    message: "Enter your Azure DevOps organization name:",
-    validate: (value) => value.trim() ? true : "Organization name cannot be empty",
-  });
+  // Load existing configuration if available
+  const existingConfig = await readConfig();
+  let organization: string;
+  let token: string;
+  let emails: string[];
 
-  const token = await Secret.prompt({
-    message: "Enter your Azure DevOps Personal Access Token (PAT):",
-    validate: (value) => value.trim() ? true : "PAT cannot be empty",
-  });
+  // Step 1: Azure DevOps Authentication
+  if (existingConfig?.organization) {
+    console.log(colors.yellow(`Found saved organization: ${existingConfig.organization}`));
+    const useExisting = await Confirm.prompt({
+      message: "Use this organization?",
+      default: true,
+    });
+
+    if (useExisting) {
+      organization = existingConfig.organization;
+    } else {
+      organization = await Input.prompt({
+        message: "Enter your Azure DevOps organization name:",
+        validate: (value) => value.trim() ? true : "Organization name cannot be empty",
+      });
+    }
+  } else {
+    organization = await Input.prompt({
+      message: "Enter your Azure DevOps organization name:",
+      validate: (value) => value.trim() ? true : "Organization name cannot be empty",
+    });
+  }
+
+  if (existingConfig?.token) {
+    console.log(colors.yellow("Found saved Personal Access Token"));
+    const useExisting = await Confirm.prompt({
+      message: "Use saved Personal Access Token?",
+      default: true,
+    });
+
+    if (useExisting) {
+      token = existingConfig.token;
+    } else {
+      token = await Secret.prompt({
+        message: "Enter your Azure DevOps Personal Access Token (PAT):",
+        validate: (value) => value.trim() ? true : "PAT cannot be empty",
+      });
+    }
+  } else {
+    token = await Secret.prompt({
+      message: "Enter your Azure DevOps Personal Access Token (PAT):",
+      validate: (value) => value.trim() ? true : "PAT cannot be empty",
+    });
+  }
 
   const azureClient = new AzureDevOpsClient(organization, token);
 
@@ -186,23 +257,54 @@ async function main() {
   }
 
   // Step 2: Get email addresses
-  const emailInput = await Input.prompt({
-    message: "Enter email address(es) to search for (comma-separated for multiple):",
-    validate: (value) => {
-      const emails = value.split(",").map(e => e.trim());
-      if (emails.length === 0 || emails.some(e => !e)) {
-        return "Please enter at least one valid email address";
-      }
-      return true;
-    },
+  if (existingConfig?.emails && existingConfig.emails.length > 0) {
+    console.log(colors.yellow(`Found saved email addresses: ${existingConfig.emails.join(", ")}`));
+    const useExisting = await Confirm.prompt({
+      message: "Use these email addresses?",
+      default: true,
+    });
+
+    if (useExisting) {
+      emails = existingConfig.emails;
+    } else {
+      const emailInput = await Input.prompt({
+        message: "Enter email address(es) to search for (comma-separated for multiple):",
+        validate: (value) => {
+          const emails = value.split(",").map(e => e.trim());
+          if (emails.length === 0 || emails.some(e => !e)) {
+            return "Please enter at least one valid email address";
+          }
+          return true;
+        },
+      });
+      emails = emailInput.split(",").map(e => e.trim());
+    }
+  } else {
+    const emailInput = await Input.prompt({
+      message: "Enter email address(es) to search for (comma-separated for multiple):",
+      validate: (value) => {
+        const emails = value.split(",").map(e => e.trim());
+        if (emails.length === 0 || emails.some(e => !e)) {
+          return "Please enter at least one valid email address";
+        }
+        return true;
+      },
+    });
+    emails = emailInput.split(",").map(e => e.trim());
+  }
+
+  // Save the configuration
+  await writeConfig({
+    organization,
+    token,
+    emails,
   });
 
-  const emails = emailInput.split(",").map(e => e.trim());
   console.log(colors.green(`Searching for commits by: ${emails.join(", ")}`));
 
   // Step 3: Prepare the contributions folder and git repository
   const contributionsPath = join(Deno.cwd(), "contributions");
-  const gitOps = new GitOperations(contributionsPath);
+  const gitOps = new GitOperations(contributionsPath, organization);
 
   spinner.text = "Preparing contributions repository...";
   spinner.start();
@@ -218,7 +320,7 @@ async function main() {
   // Get the last commit date if the file exists
   const lastCommitDate = await gitOps.getLastCommitDate();
   if (lastCommitDate) {
-    console.log(colors.yellow(`Found existing foo.txt with last commit date: ${lastCommitDate.toLocaleString()}`));
+    console.log(colors.yellow(`Found existing ${organization}.txt with last commit date: ${lastCommitDate.toLocaleString()}`));
     console.log(colors.yellow("Only processing commits after this date."));
   }
 
