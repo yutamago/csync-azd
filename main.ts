@@ -1,10 +1,12 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-run --allow-env
 
 import {Confirm, Input, Secret} from "@cliffy/prompt";
+import {keypress} from "@cliffy/keypress";
 import ora from "ora";
 import * as colors from "@std/fmt/colors";
 import {ensureDir, exists} from "@std/fs";
 import {join} from "@std/path";
+
 
 // Configuration interface
 interface Config {
@@ -36,7 +38,7 @@ async function readConfig(organization?: string): Promise<Config | null> {
         return JSON.parse(content) as Config;
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(colors.yellow(`Warning: Failed to read config file: ${error.message}`));
   }
   return null;
@@ -47,9 +49,15 @@ async function writeConfig(config: Config): Promise<void> {
   try {
     const configFile = getConfigFilePath(config.organization);
     await Deno.writeTextFile(configFile, JSON.stringify(config, null, 2));
-  } catch (error) {
+  } catch (error: any) {
     console.error(colors.yellow(`Warning: Failed to write config file: ${error.message}`));
   }
+}
+
+// Function to wait for a keypress before exiting
+async function waitForKeyPress(): Promise<void> {
+  console.log(colors.yellow("\nPress any key to exit..."));
+  await keypress();
 }
 
 // Function to list available organizations from config files
@@ -79,7 +87,7 @@ async function listAvailableOrganizations(): Promise<string[]> {
         // Ignore errors reading the default config
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(colors.yellow(`Warning: Failed to list organizations: ${error.message}`));
   }
 
@@ -352,6 +360,7 @@ async function main() {
     spinner.succeed("Successfully connected to Azure DevOps");
   } catch (error: any) {
     spinner.fail(`Failed to connect to Azure DevOps: ${error.message}`);
+    await waitForKeyPress();
     Deno.exit(1);
   }
 
@@ -414,6 +423,7 @@ async function main() {
     spinner.succeed("Contributions repository ready");
   } catch (error: any) {
     spinner.fail(`Failed to prepare git repository: ${error.message}`);
+    await waitForKeyPress();
     Deno.exit(1);
   }
 
@@ -439,6 +449,7 @@ async function main() {
     spinner.succeed(`Found ${projects.length} projects`);
   } catch (error: any) {
     spinner.fail(`Failed to fetch projects: ${error.message}`);
+    await waitForKeyPress();
     Deno.exit(1);
   }
 
@@ -489,6 +500,7 @@ async function main() {
 
   if (allCommits.length === 0) {
     console.log(colors.yellow("No commits found for the specified email addresses."));
+    await waitForKeyPress();
     Deno.exit(0);
   }
 
@@ -524,6 +536,9 @@ async function main() {
 
   console.log(colors.bold(colors.green("\n✅ Contribution sync completed successfully!")));
   console.log(colors.blue(`Your contributions have been synced to: ${contributionsPath}`));
+
+  // Wait for keypress before exiting
+  await waitForKeyPress();
 }
 
 // Run the application
@@ -532,6 +547,7 @@ if (import.meta.main) {
     await main();
   } catch (error: any) {
     console.error(colors.bold(colors.red(`\n❌ Error: ${error.message}`)));
+    await waitForKeyPress();
     Deno.exit(1);
   }
 }

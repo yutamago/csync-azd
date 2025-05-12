@@ -1,0 +1,50 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and Release Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: Build binaries
+        run: deno task compile
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            bin/csync-azd-windows-x86_64.exe
+            bin/csync-azd-macos-x86_64
+            bin/csync-azd-macos-arm64
+            bin/csync-azd-linux-x86_64
+            bin/csync-azd-linux-arm64
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## Azure DevOps Contribution Sync Tool - ${{ github.ref_name }}
+
+            ### Binaries
+            - Windows (x86_64): [csync-azd-windows-x86_64.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-windows-x86_64.exe)
+            - macOS (x86_64): [csync-azd-macos-x86_64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-macos-x86_64)
+            - macOS (arm64): [csync-azd-macos-arm64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-macos-arm64)
+            - Linux (x86_64): [csync-azd-linux-x86_64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-linux-x86_64)
+            - Linux (arm64): [csync-azd-linux-arm64](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/csync-azd-linux-arm64)

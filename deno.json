@@ -1,15 +1,32 @@
 {
+  "name": "@yutamago/csync-azd",
   "tasks": {
     "dev": "deno run --watch main.ts",
-    "start": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-sys main.ts"
+    "start": "deno run --allow-net --allow-read --allow-write --allow-run --allow-env --allow-sys main.ts",
+    "compile": "deno run compile:win && deno run compile:mac && deno run compile:linux",
+    "compile:local": "deno run compile:local:no-target --output bin/csync-azd main.ts",
+
+    "compile:win": "deno run compile:win:x86_64",
+    "compile:win:x86_64": "deno run compile:local:no-target --target x86_64-pc-windows-msvc --output bin/csync-azd-windows-x86_64.exe main.ts",
+
+    "compile:mac": "deno run compile:mac:x86_64 && deno run compile:mac:arm64",
+    "compile:mac:x86_64": "deno run compile:local:no-target --target x86_64-apple-darwin --output bin/csync-azd-macos-x86_64 main.ts",
+    "compile:mac:arm64": "deno run compile:local:no-target --target aarch64-apple-darwin --output bin/csync-azd-macos-arm64 main.ts",
+
+    "compile:linux": "deno run compile:linux:x86_64 && deno run compile:linux:arm64",
+    "compile:linux:x86_64": "deno run compile:local:no-target --target x86_64-unknown-linux-gnu --output bin/csync-azd-linux-x86_64 main.ts",
+    "compile:linux:arm64": "deno run compile:local:no-target --target aarch64-unknown-linux-gnu --output bin/csync-azd-linux-arm64 main.ts",
+
+    "compile:local:no-target": "deno compile --allow-net --allow-read --allow-write --allow-run --allow-env --allow-sys"
   },
   "imports": {
+    "@cliffy/command": "jsr:@cliffy/command@1.0.0-rc.7",
+    "@cliffy/keypress": "jsr:@cliffy/keypress@^1.0.0-rc.7",
+    "@cliffy/prompt": "jsr:@cliffy/prompt@^1.0.0-rc.7",
     "@std/cli": "jsr:@std/cli@^1.0.17",
     "@std/fmt": "jsr:@std/fmt@^1.0.7",
     "@std/fs": "jsr:@std/fs@^1.0.17",
     "@std/path": "jsr:@std/path@^1.0.9",
-    "@cliffy/command": "jsr:@cliffy/command@1.0.0-rc.7",
-    "@cliffy/prompt": "jsr:@cliffy/prompt@^1.0.0-rc.7",
     "ora": "npm:ora@7.0.1"
   }
 }
