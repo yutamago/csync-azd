@@ -13,7 +13,7 @@ A command-line tool that syncs your Azure DevOps commits to a local Git reposito
 
 ### Download pre-built binary
 
-Download the appropriate binary for your platform from the [Releases](https://github.com/yourusername/contribution-sync-azure-devops-to-github/releases) page:
+Download the appropriate binary for your platform from the [Releases](https://github.com/yutamago/csync-azd/releases) page:
 
 ```
 # Windows
