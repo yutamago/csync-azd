@@ -3,7 +3,7 @@
 Your company works in Azure DevOps and your Github activity graph looks abandoned?
 Just sync your contributions to Github!
 
-This command-line tool syncs your Azure DevOps commits to a local Git repository and you can push them wherever you like.
+This command-line tool syncs your Azure DevOps commits as fake commits to a local Git repository and you can push them wherever you like.
 The fake commits do not contain any code, just metadata of the original commit.
 
 ## What it does
